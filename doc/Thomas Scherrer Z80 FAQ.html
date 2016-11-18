@@ -1,0 +1,556 @@
+
+<!-- saved from url=(0060)http://www.zophar.net/fileuploads/2/10810irctp/z80_faq2.html -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+
+
+<title>Thomas Scherrer Z80 FAQ</title>
+
+
+<meta name="Microsoft Theme" content="sumipntg 011, default"><style type="text/css">
+:root .adsbygoogle,
+:root #top_rectangle_ad,
+:root #content > #right > .dose > .dosesingle,
+:root #content > #center > .dose > .dosesingle
+{ display: none !important; }</style></head><body background="./Thomas Scherrer Z80 FAQ_files/sumtextb.jpg" bgcolor="#FFFFFF" text="#808080" link="#3333CC" vlink="#666699" alink="#990099"><!--mstheme--><font face="verdana">
+
+
+<!--msthemeseparator--><p align="center"><img src="./Thomas Scherrer Z80 FAQ_files/sumhorsa.gif" width="300" height="10"></p><img align="top" src="./Thomas Scherrer Z80 FAQ_files/zlogo1.gif" alt="Zilog Logo"><!--msthemeseparator--><p align="center"><img src="./Thomas Scherrer Z80 FAQ_files/sumhorsa.gif" width="300" height="10"></p>
+
+
+<h2><!--mstheme--><font color="#003366">This is the Z80 HardWare and Software FAQ...<!--mstheme--></font></h2>
+
+
+Is you want to partisipate, please E-mail Questions or Answers to me.
+
+
+<a href="mailto:intra@inet.uni-c.dk">Thomas Scherrer</a>
+
+<!--msthemeseparator--><p align="center"><img src="./Thomas Scherrer Z80 FAQ_files/sumhorsa.gif" width="300" height="10"></p>
+
+<!--mstheme--></font><pre>
+Questions - from: <a href="mailto:gclind01@starbase.spd.louisville.edu">George C. Lindauer</a>
+
+
+Answers by: <a href="mailto:intra@inet.uni-c.dk.dk">Thomas Scherrer</a> - <a href="http://www.cybernet.dk/users/tscherrer">HomePage</a>
+
+And by: <a href="mailto:n2wx@tapr.org">Howard Goldstein</a> - <a href="http://www.tapr.org/~n2wx/">HomePage</a>
+
+Also by: <a href="mailto:tcj@psyber.com">Dave Baldwin,</a> Editor/Publisher of <a href="http://www.psyber.com/~tcj/">The Computer Journal</a>
+
+
+
+-------
+
+
+
+<b><big>Q-1:</big></b> I AND R REGISTERS.  What they do.
+
+
+
+  <b>Answer:</b> I is the Interrupt page address register.
+
+The Z-80 CPU can be operated in mode2 where an indirect call to any memory
+
+location can be achieved in responce to an interrupt. The I register is used
+
+for this purpose to store the high order 8-bits of the indirect address while
+
+the interrupting device provides the lower 8-bits of the address. This
+
+feature allows interrupt routines to be located anywhere in memory.
+
+
+
+  <b>Answer:</b> R is the memory Refresh register.
+
+The Z-80 CPU contains a memory refresh counter to enable dynamic memories
+
+to be used with the same ease as static memories. Seven bits of this 8 bit
+
+register are automatically incremented after each instruction fetch.
+
+The eight bits will remain as programmed with the LD R,A instruction.
+
+The data in the refresh counter is sent out on the lower portion of the
+
+address bus along with a refresh control signal while the CPU is decoding
+
+and executing the instruction. The programmer can load the R register for
+
+testing purposes, but this register is normally NOT used by the programmer.
+
+During refresh, the contents of the I register are placed on the upper
+
+8 bits of the address bus.
+
+
+
+-------
+
+
+
+<b><big>Q-2:</big></b> I AND R REGISTERS.  Will EXX change them or is there only one copy
+
+of them?
+
+
+
+  <b>Answer:</b> There is only one copy of the I and R registers, EXX don't
+
+affect I and R at all.
+
+
+
+-------
+
+
+
+<b><big>Q-3:</big></b> IM x instruction.  What does it do.
+
+
+
+  <b>Answer:</b> IM0, IM1, IM2 sets the interrupt mode.
+
+
+
+Mode 0: The interrupting device can insert any instruction on the data
+
+bus and allow the CPU to execute it (the old 8080 mode, default mode).
+
+The Z80 will execute any one-byte instruction properly like a RST xx.  Where
+
+the 8080 would execute any instruction, the Z80 needs some external logic
+
+to execute multi-byte instructions like CALL xxxx.
+
+
+
+Mode 1: Is a simplified mode where the CPU automatically executes a
+
+restart (RST) to location 0038h so that no external hardware is required
+
+(the old PC content is pushed onto the stack, and returned with a regular
+
+return instruction, RET.
+
+
+
+Mode 2: Is the most powerful, in that it allows for an indirect call to
+
+any location in memory. With this mode the CPU forms a 16-bit memory address
+
+where the upper 8-bits are the content of register I and the lower 8-bits
+
+are supplied by the interrupting device. This address points to the first of
+
+two sequential bytes in a table where the address of the service routine is
+
+located. The CPU automatically obtains the starting address and performs a
+
+CALL to this address. The RETI is also used to return to the main programm.
+
+
+
+
+
+-------
+
+
+
+<b><big>Q-4:</big></b> On the LD (IX + %D),%D instruction, does the index byte come first?
+
+
+
+  <b>Answer:</b> Yes the index byte comes first.
+
+
+
+-------
+
+
+
+<b><big>Q-5:</big></b> Are indexes (IX + %D) signed or unsigned?
+
+
+
+  <b>Answer:+</b> Signed (2's complement) with range -128 to +127.
+
+
+
+-------
+
+
+
+<b><big>Q-7:</big></b> What reg does DJNZ affect?  Does it affect the flags or does it just
+
+ test the register against zero?
+
+
+
+  <b>Answer:+</b> DJNZ means "Decrement and Jump if Not Zero" this instruction uses only
+
+the B register as a counter...
+
+Example:  LD   B,100
+
+loop:     NOP
+
+          DJNZ loop   The nop will be executed 100 times.
+
+Remember this form of jump is relative 8 bit only.
+
+
+
+-------
+
+
+
+<b><big>Q-8:</big></b> I need to know which rotates &amp; shifts go through the carry and which
+
+ones don't; also if there are any that don't affect the carry at all I need to know it.
+
+
+
+  <b>Answer:</b>
+
+
+
+<b>Howard Goldstein:</b> - All of the rotate and shift operands _affect_ carry.
+
+The real question is which rotates and shifts treat carry as a bit separate
+
+from bit 7 (since the z-80 only recognizes 8 bit signed operands).
+
+See the databook to see which instructions treat the carry flag as a unique
+
+bit in a rotate operation (in shift operations the carry bit is always a unique bit).
+
+
+
+<b>Thomas Scherrer:</b> - Check the Z80 syntax. It's growing, and now there are docs 
+
+about the rotates &amp; shifts.
+
+
+
+-------
+
+
+
+<b><big>Q-9:</big></b> CPL is a ones complement of A?
+
+
+
+  <b>Answer:</b> Unsigned complement, 11000111B will be 00111000B after execution of CPL
+
+
+
+-------
+
+
+
+<b><big>Q-10:</big></b> NEG is a twos complement?
+
+
+
+  <b>Answer:</b> Yes 100 wil be -100, after execution of NEG.
+
+
+
+-------
+
+
+
+<b><big>Q-11:</big></b> How does DAA work?
+
+
+
+  <b>Answer:</b>
+
+
+
+<b>Dave Baldwin:</b> - DAA (Decimal Adjust Accumulator) adds a correction factor to
+
+ the contents of the Accumulator so that it will properly represent the results of a Packed
+
+BCD operation.  It uses the 'N' flag to determine whether the previous instruction was an
+
+addition or subtraction.
+
+
+
+<b>Thomas Scherrer:</b> - <a href="http://www.zophar.net/fileuploads/2/10810irctp/z80syntx.htm#DAA">See the Z80Syntax</a>
+
+
+
+-------
+
+
+
+<b><big>Q-12:</big></b> Do the RST instructions have any side effects?
+
+
+
+  <b>Answer:</b> Well one side effect is that it's a one-byte CALL intstruction which means
+
+ that it pushes the location of PC (Program Counter) onto the stack, so you can return later with RET.
+
+
+
+CALL ADDRESS   MNEMONIC
+
+-----------------------
+
+0000h          RST 00h
+
+0008h          RST 08h
+
+0010h          RST 10h
+
+0018h          RST 18h
+
+0020h          RST 20h
+
+0028h          RST 28h
+
+0030h          RST 30h
+
+0038h          RST 38h
+
+
+
+-------
+
+
+
+<b><big>Q-13:</big></b> What does RETI do?
+
+
+
+  <b>Answer:</b>
+
+
+
+<b>Dave Baldwin:</b> - RETI (Return from interrupt) pops the return address from the stack,
+
+like RET.  RETI is also decoded by the Z80 peripheral chips (SIO, CTC, PIO, DMA) and tells
+
+them to reset the interrupt daisy chain so the next interrupt can be accepted.
+
+
+
+<b>Howard Goldstein:</b> - RETI acts like RET except that some zilog
+
+perihpherals recognize the RETI instruction sequence (0xed, 0x4d) for
+
+purposes of clearing their internal interrupt-pending flags.
+
+This has repurcussions for the daisy-chain interrupt technique used by the z-80 family.
+
+
+
+-------
+
+
+
+<b><big>Q-14:</big></b> What does RETN do?
+
+
+
+  <b>Answer:</b>
+
+
+
+<b>Thomas Scherrer:</b> - This is a 'return' instruction used with the NON-maskable
+
+hardware interrupt NMI.  It's special purpose is to restore the CPU's internal interrupt control
+
+flags so that regular interrupts can be processed.  A NMI is a restart (CALL) to location 0066h.
+
+
+
+-------
+
+
+
+<b><big>Q-15:</big></b> I assume RRD and RLD rotate the number in HL.  Do they use or
+
+affect the carry?
+
+
+
+-------
+
+
+
+<b><big>Q-16:</big></b> I need to know the effects of this class of instructions:
+
+
+
+LDI, LDIR
+
+CPI, CPIR
+
+INI, INIR
+
+OUTI, OTIR
+
+
+
+-------
+
+
+
+<b><big>Q-17:</big></b> When AF is pushed which goes lower on the stack, A or F?
+
+
+
+  <b>Answer:</b>
+
+
+
+<b>Dave Baldwin:</b> A is the high byte, F is the low.  If you 'PUSH AF' then 'POP BC',
+
+ the contents of A will be in B and the contents of F will be in C.
+
+
+
+-------
+
+
+
+<b><big>Q-18:</big></b> I assume when HL is pushed the L register is lower.
+
+
+
+  <b>Answer:</b>
+
+
+
+<b>Dave Baldwin:</b> Yes. The low order byte is also lower on the stack when any 
+
+of the 16-bit register pairs are pushed on the stack  (AF, BC, DE, HL, IX, IY, and PC).
+
+
+
+-------
+
+
+
+<b><big>Q-19:</big></b> I assume the stack is predecremented before putting pushed data
+
+on it.  And postincremented after popping data.  This keeps the stack pointer pointing to the TOS.
+
+
+
+-------
+
+
+
+<b><big>Q-20:</big></b> When you do a RST  (or an interrupt in mode 1 or 2)
+
+Do interrupts get disabled until the RETI?
+
+
+
+  <b>Answer:</b> An RST instruction does not disable interrupts, though it can be used
+
+as a response to an interrupt acknowledge in Mode 0.  Any interrupt that is acknowledged
+
+by the CPU disables further maskable interrupts (/INT pin) until they are enabled by
+
+the EI instruction.  The NMI (Non-maskable interrupt) can interrupt a maskable interrupt.
+
+
+
+-------
+
+
+
+<b><big>Q-21:</big></b> Can the NMI procedure be interrupted by an interrupt or by an NMI?
+
+
+
+  <b>Answer:</b>
+
+
+
+<b>Howard Goldstein:</b> - (a) The NMI cannot be interrupted by a maskable interrupt (/INT)
+
+because the NMI is defined to atomically copy the IFF1 to IFF2 and then set IFF1 to 0.
+
+
+
+<b>Howard Goldstein:</b> - (b) The NMI may be interrupted by another NMI.  Hardware is
+
+responsible for ensuring the /NMI input is adequately processed to ensure
+
+the NMI procedure is completed before another NMI is issued.
+
+  Another thing to watch out for is the IFF2 state, when the second NMI begins.
+
+It is lost, and that would f*ck up the old IE state when RETN runs
+
+(RETN of course also restores IFF2 to IFF1) leaving the system with interrupts
+
+disabled.  Makes it even more important to damp /NMI with hardware
+
+(low pass filter?  one shot?)
+
+
+
+<b>Thomas Scherrer:</b> - Use an RS-FlipFlop, so the /NMI can't be triggerd
+
+before you reset(enable) the RS-FF, you can use a output port bit for this.
+
+
+
+-------
+
+
+
+<b><big>Q-22:</big></b> I assume DAA uses the N bit to do either an ADD adjustment or
+
+        a SUBTRACT adjustment.
+
+
+
+<b>Thomas Scherrer:</b> - <a href="http://www.zophar.net/fileuploads/2/10810irctp/z80syntx.htm#DAA">See the Z80Syntax under DAA</a>
+
+
+
+-------
+
+
+
+<b><big>Q-23:</big></b> What are the flags of RRD and RLD based on?  The new contents
+
+        of A or the new contents of HL?
+
+
+
+-------
+
+
+
+<b><big>Q-24:</big></b> How is the HC flag set on IN instructions
+
+
+
+-------
+
+
+
+<b><big>Q-25:</big></b> On the CPIR and CPDR instructions, how are the flags
+
+set on success?  On failure?  In particular I'm looking for the difference
+
+between aborting when A = [HL] and aborting when BC = 0.
+
+
+
+-------
+
+<!--msthemeseparator--><p align="center"><img src="./Thomas Scherrer Z80 FAQ_files/sumhorsa.gif" width="300" height="10"></p></pre><!--mstheme--><font face="verdana"><!--mstheme--></font>
+
+</body></html>
