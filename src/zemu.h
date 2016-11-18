@@ -4,9 +4,12 @@
 
 #define Z80_RAM_SIZE 32768
 
-typedef struct register_pair {
-    uint8_t r1;
-    uint8_t r2;
+typedef union register_pair {
+    uint16_t full;
+    struct {
+        uint8_t lsb;
+        uint8_t msb;
+    };
 } register_pair_t;
 
 typedef struct registers {
@@ -22,10 +25,10 @@ typedef struct registers {
     register_pair_t hl1;
     register_pair_t wz;
     register_pair_t wz1;
-    uint8_t f;
-    uint8_t f1;
-    uint8_t a;
-    uint8_t a1;
+    register_pair_t af;
+    register_pair_t af1;
+    uint8_t *flags;
+    uint8_t *acc;
 } registers_t;
 
 typedef struct z80 {
@@ -36,4 +39,5 @@ typedef struct z80 {
 void loop(z80_t *);
 z80_t *setup();
 void shutdown(z80_t *);
+void print_registers(z80_t *);
 
