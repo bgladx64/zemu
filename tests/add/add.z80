@@ -1,0 +1,11 @@
+#target rom
+
+#code _MAIN,0,0x4000
+
+main:
+		ld		a,5
+        ld      b,7
+		add		a,b
+
+#end
+
