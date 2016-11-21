@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "zemu.h"
 #include "utils.h"
+#include "ops.h"
 
 // TODO next:
 // 
@@ -71,24 +72,7 @@ void loop(z80_t *cpu) {
 #ifdef VERBOSE
                 printf("INC B\n");
 #endif
-                ov = reg->bc.msb == 0x7F;
-                hc = ((1 & 0xf) + (reg->bc.msb & 0xf)) & 0x10;
-                reg->bc.msb++;
-                // S
-                copy_bit(flags, FLAG_MASK_SIGN, test_bit(&reg->bc.msb, FLAG_MASK_SIGN) ? 1 : 0);
-                // Z
-                if (!reg->bc.msb) set_bit(flags, FLAG_MASK_ZERO);
-                else clear_bit(flags, FLAG_MASK_ZERO);
-                // 5
-                copy_bit(flags, FLAG_MASK_5, test_bit(&reg->bc.msb, FLAG_MASK_5) ? 1 : 0);
-                // H
-                copy_bit(flags, FLAG_MASK_HCARRY, hc ? 1 : 0);
-                // 3
-                copy_bit(flags, FLAG_MASK_3, test_bit(&reg->bc.msb, FLAG_MASK_3) ? 1 : 0);
-                // V
-                copy_bit(flags, FLAG_MASK_PV, ov ? 1 : 0);
-                // N
-                clear_bit(flags, FLAG_MASK_SUBTRACT);
+                z80_inc(cpu, &reg->bc.msb);
                 break;
             case 0x05:
                 // DEC B
@@ -96,24 +80,7 @@ void loop(z80_t *cpu) {
 #ifdef VERBOSE
                 printf("DEC B\n");
 #endif
-                ov = reg->bc.msb == 0x80;
-                hc = ((reg->bc.msb & 0xf) - (1 & 0xf)) & 0x10;
-                reg->bc.msb--;
-                // S
-                copy_bit(flags, FLAG_MASK_SIGN, test_bit(&reg->bc.msb, FLAG_MASK_SIGN) ? 1 : 0);
-                // Z
-                if (!reg->bc.msb) set_bit(flags, FLAG_MASK_ZERO);
-                else clear_bit(flags, FLAG_MASK_ZERO);
-                // 5
-                copy_bit(flags, FLAG_MASK_5, test_bit(&reg->bc.msb, FLAG_MASK_5) ? 1 : 0);
-                // H
-                copy_bit(flags, FLAG_MASK_HCARRY, hc ? 1 : 0);
-                // 3
-                copy_bit(flags, FLAG_MASK_3, test_bit(&reg->bc.msb, FLAG_MASK_3) ? 1 : 0);
-                // V
-                copy_bit(flags, FLAG_MASK_PV, ov ? 1 : 0);
-                // N
-                set_bit(flags, FLAG_MASK_SUBTRACT);
+                z80_dec(cpu, &reg->bc.msb);
                 break;
             case 0x06:
                 // LD B, n
@@ -143,8 +110,13 @@ void loop(z80_t *cpu) {
             case 0x0B: // DEC BC
                 reg->bc.full--;
                 break;
-            case 0x0C: // INC C
-                reg->bc.lsb++;
+            case 0x0C:
+                // INC C
+                // SZ5H3VN-
+#ifdef VERBOSE
+                printf("INC C\n");
+#endif
+                z80_inc(cpu, &reg->bc.lsb);
                 break;
             case 0x0D:
                 // DEC C
@@ -152,24 +124,7 @@ void loop(z80_t *cpu) {
 #ifdef VERBOSE
                 printf("DEC C\n");
 #endif
-                ov = reg->bc.lsb == 0x80;
-                hc = ((reg->bc.lsb & 0xf) - (1 & 0xf)) & 0x10;
-                reg->bc.lsb--;
-                // S
-                copy_bit(flags, FLAG_MASK_SIGN, test_bit(&reg->bc.lsb, FLAG_MASK_SIGN) ? 1 : 0);
-                // Z
-                if (!reg->bc.lsb) set_bit(flags, FLAG_MASK_ZERO);
-                else clear_bit(flags, FLAG_MASK_ZERO);
-                // 5
-                copy_bit(flags, FLAG_MASK_5, test_bit(&reg->bc.lsb, FLAG_MASK_5) ? 1 : 0);
-                // H
-                copy_bit(flags, FLAG_MASK_HCARRY, hc ? 1 : 0);
-                // 3
-                copy_bit(flags, FLAG_MASK_3, test_bit(&reg->bc.lsb, FLAG_MASK_3) ? 1 : 0);
-                // V
-                copy_bit(flags, FLAG_MASK_PV, ov ? 1 : 0);
-                // N
-                set_bit(flags, FLAG_MASK_SUBTRACT);
+                z80_dec(cpu, &reg->bc.lsb);
                 break;
             case 0x0E:
                 // LD C, n
@@ -251,24 +206,7 @@ void loop(z80_t *cpu) {
 #ifdef VERBOSE
                 printf("DEC A\n");
 #endif
-                ov = reg->af.msb == 0x80;
-                hc = ((reg->af.msb & 0xf) - (1 & 0xf)) & 0x10;
-                reg->af.msb--;
-                // S
-                copy_bit(flags, FLAG_MASK_SIGN, test_bit(&reg->af.msb, FLAG_MASK_SIGN) ? 1 : 0);
-                // Z
-                if (!reg->af.msb) set_bit(flags, FLAG_MASK_ZERO);
-                else clear_bit(flags, FLAG_MASK_ZERO);
-                // 5
-                copy_bit(flags, FLAG_MASK_5, test_bit(&reg->af.msb, FLAG_MASK_5) ? 1 : 0);
-                // H
-                copy_bit(flags, FLAG_MASK_HCARRY, hc ? 1 : 0);
-                // 3
-                copy_bit(flags, FLAG_MASK_3, test_bit(&reg->af.msb, FLAG_MASK_3) ? 1 : 0);
-                // V
-                copy_bit(flags, FLAG_MASK_PV, ov ? 1 : 0);
-                // N
-                set_bit(flags, FLAG_MASK_SUBTRACT);
+                z80_dec(cpu, &reg->af.msb);
                 break;
             case 0x3E:
                 // LD A, n
@@ -336,7 +274,7 @@ void loop(z80_t *cpu) {
 #ifdef VERBOSE
                 printf("OUT (0x%02x), A\n", *(rom + reg->pc));
 #endif
-                write_port(*(rom + reg->pc++), reg->af.msb);
+                write_port(cpu, (reg->af.full & 0xFF00) + *(rom + reg->pc++), reg->af.msb);
                 break;
             case 0xED:
                 // Extended instructions
@@ -408,7 +346,7 @@ void ed_instructions(z80_t *cpu) {
             printf("OTIR\n");
 #endif
             while (reg->bc.msb) {
-                write_port(reg->bc.lsb, *(rom + reg->hl.full++));
+                write_port(cpu, reg->bc.lsb, *(rom + reg->hl.full++));
                 reg->bc.msb--;
             }
             

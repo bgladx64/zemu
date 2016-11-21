@@ -3,7 +3,7 @@
 #code _MAIN,0,0x4000
 
 main:
-    ld  B, 0xFC
+    ld  B, 0x00
 loop1:
     inc B
     jr  Z, loop2

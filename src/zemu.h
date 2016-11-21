@@ -71,5 +71,5 @@ void loop(z80_t *);
 void ed_instructions(z80_t *);
 z80_t *setup();
 void shutdown(z80_t *);
-void write_port(uint16_t addr, uint8_t data);
+void write_port(z80_t *cpu, uint16_t addr, uint8_t data);
 

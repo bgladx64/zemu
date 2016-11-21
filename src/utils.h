@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdio.h>
 #include "zemu.h"
 
 void print_registers(z80_t *cpu);

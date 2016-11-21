@@ -29,8 +29,9 @@ int main(int argc, char **argv) {
     return 0;
 }
 
-void write_port(uint16_t addr, uint8_t data) {
+void write_port(z80_t *cpu, uint16_t addr, uint8_t data) {
     printf("WRITEOUT: (0x%04X) 0x%02X\n", addr, data);
+    *(cpu->mem + addr) = data;
     return;
 }
 
