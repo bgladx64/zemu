@@ -6,7 +6,7 @@ TARGET = zemu
 
 all: $(TARGET)
 
-$(TARGET): $(SDIR)/*.c
+$(TARGET): $(SDIR)/zemu.c $(SDIR)/loop.c $(SDIR)/utils.c
 	$(CC) -o $(ODIR)/$(TARGET) $(CFLAGS) $^
 
 clean:

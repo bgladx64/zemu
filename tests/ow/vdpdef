@@ -1,0 +1,143 @@
+;---------------------------------------------
+;
+;   Some default SMS VDP Register values
+;                by Mike G.
+;              4th March 2001
+;
+;   Many thanks to Jon, SMSC, Charles
+;   MacDonald, and Richard Talbot-Watkins
+;   for their sterling work in documenting
+;   the SMS VDP functions.
+;
+;   Thanks also to Sean Young of msxnet.org
+;   for his accurate and exhaustive TMS9918
+;   document.
+;
+;   You should read these documents if you
+;   want accurate VDP info - the comments
+;   in this source are just a guide.
+; 
+;   The data should also apply to the SG-1000
+;   except for those settings marked as SMS
+;   only.
+;---------------------------------------------
+
+; Note:
+;
+; By "on SMS" or "SMS only" I mean "when SMS mode is set",
+; i.e. when bit 2 of register 0 is set.
+;
+; By "on TMS9918" or "TMS9918 only" I mean "when TMS mode is set",
+; i.e. when bit 2 of register 0 is reset.
+
+
+; Register 0
+
+.db %00000100		; byte to write to VDP register
+.db %10000000		; register to write to (%1000xxxx where xxxx is reg. no.)
+
+
+; BIT 76543210 (bit numbering, for those who don't know)
+;    %xxxxxxxx
+;
+; "Set" means "make this bit equal to 1"
+; "Reset" means "make this bit equal to 0"
+;
+; What each bit means:
+;
+; Bit 0 - Set to disable screen sync (causes TV to "roll" on a real SMS).
+;     1 - Set to stretch screen to 33 columns on SMS. Set to enable mode 2 on TMS9918.
+;     2 - Set to enable SMS display mode, reset to enable TMS9918 (SG-1000) type modes.
+;     3 - Set to shift sprites left by 8 pixels (SMS only).
+;     4 - Set to enable line interrupts (SMS only).
+;     5 - Set to blank column 0, allows smooth horizontal scrolling (SMS only).
+;     6 - Set to fix top two rows during horizontal scroll (SMS only).
+;     7 - Set to fix right 8 columns during vertical scroll (SMS only).
+
+
+; Register 1
+
+.db %10000000
+.db %10000001
+
+; Bit 0 - Enable "zoomed sprites" - each sprite pixel is zoomed to 4 pixels giving 16x16 sprite.
+;     1 - Enable "magnified sprites" - 8x16 sprites consisting of 2 tiles. (SMS only).
+;         On the TMS9918, this bit sets a further level of zoom to give up to 32x32 sprites.
+;     2 - Does nothing.
+;     3 - Expand screen by 6 rows on SMS giving a 32x30 screen. Set to enable mode 3 on TMS9918.
+;     4 - Expand screen by 4 rows on SMS giving a 32x28 screen. Set to enable mode 1 on TMS9918.
+;     5 - Set to enable VSync interrupts on both SMS and TMS9918.
+;     6 - Set to enable VDP display.
+;     7 - Set to enable 16K VRAM, reset for 4K VRAM. This bit must *always* be set as the SMS
+;         and SG-1000 consoles have 16K of VRAM.
+
+
+; Register 2
+
+.db %11111111
+.db %10000010
+
+;  Set name table address at $800 byte offset. Only bits 1, 2 and 3 are significant, so
+;  a setting of %xxxx111x results in a name table address of %11100000000000, or $3800.
+
+; Register 5
+
+.db %11111111
+.db %10000101
+
+; Set base address of sprite attribute table. Only bits 1-6 are significant, so
+; a setting of %x111111x results in an attribute table address of $11111100000000, or $3F00.
+  
+; Register 6
+
+.db %11111111
+.db %10000110
+
+; Set base adress of sprite generator table on TMS9918.
+; On the SMS, this address is used to select the base address of tiles used for
+; sprites - only bit 2 is significant, so a setting of %xxxxx1xx results in a base
+; address of $2000 and %xxxxx0xx results in a base address of $0000. This is needed
+; because only 8 bits are used to set the tile number in the sprite attribute table,
+; so it effectively acts as a "9th bit" for the tile address of *all* sprites.
+
+; Register 7
+
+.db %00000010
+.db %10000111
+
+; Two nibbles (4 bit words). The high nibble (bits 4-7) selects the palette colour used for text
+; on the TMS9918, the low nibble (bits 0-3) selects the colour from the sprite palette to be used
+; for the border (on both TMS9918 and SMS). In each case it's a number from 0 to 15.
+
+; Register 8
+
+.db %00000000
+.db %10001000
+
+; Selects horizontal scroll offset of column 0 in pixels from the left hand edge. (SMS only.)
+
+; Register 9
+
+.db %00000000
+.db %10001001
+
+; Selects vertical scroll offset. The value in this register indicates the line of the SMS display
+; to be displayed on the top scanline of the TV picture. (SMS only.)
+
+; Register 10
+
+.db %00000000
+.db %10001010
+
+; Finally, register 10 selects the number of scanlines to occur between line interrupts (assuming line
+; interrupts are enabled). (SMS only.)
+
+;---------------------------------------------
+;  Mike G. 04/03/01
+;
+;  mike@mikeg2.freeserve.co.uk
+;
+; my page - http://www.mikeg2.freeserve.co.uk
+;
+;  SMS Power! http://www.smspower.org
+;---------------------------------------------

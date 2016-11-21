@@ -1,0 +1,25 @@
+#target rom
+
+#code _MAIN,0,0x4000
+
+main:
+    ld  B, 0xFC
+loop1:
+    inc B
+    jr  Z, loop2
+    jr  loop1
+
+loop2:
+    dec B
+    jr  Z, end
+    jr loop2
+
+end:
+    nop
+
+#end
+
+
+
+total time: 0.0003 sec.
+no errors

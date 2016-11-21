@@ -1,0 +1,61 @@
+;-------------------------
+;
+;  Text message data
+; for "Only Words" demo
+;
+;   by Mike G.
+;
+;   4th March 2001
+;
+;-------------------------
+
+
+
+.db "          Only"
+.db " Words            "
+.db "          ===="
+.db "======            "
+.db "             "
+.db "                   "
+.db "  This demo was"
+.db " written to show "
+.db " my (lack of) p"
+.db "rogramming talent"
+.db " and to demonst"
+.db "rate how (not) to"
+.db " perform one of"
+.db " the simplest    "
+.db " tasks - displ"
+.db "aying words on the"
+.db " screen :-)  "
+.db "                   "
+.db "             "
+.db "                   "
+.db "  It's also my"
+.db " first attempt at "
+.db " coding for th"
+.db "e SMS or indeed   "
+.db " any Z80 platform,"
+.db " so please be "
+.db " gentle!      "
+.db "                  "
+.db "             "
+.db "                   "
+.db " Greetings to"
+.db " Zoop, Heliophobe, "
+.db " Eric, Maxim a"
+.db "nd everyone at S8-"
+.db " Dev.        "
+.db "                   "
+.db "             "
+.db "                   "
+.db "  http://www."
+.db "smspower.org/dev/  "
+.db "             "
+.db "                   "
+.db "  Ver. 0.1 by"
+.db " Mike G, 4/3/01.   "
+
+.db $00
+	; zero byte ends text.
+

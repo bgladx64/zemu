@@ -1,0 +1,2010 @@
+;-----------------------------------------
+;             "Only Words"
+;
+;       (my first attempt at any
+;        kind of SMS programming!)
+;
+;	for the Sega Master System
+;
+;                  by
+;
+;              Mike Gordon
+;      mike@mikeg2.freeserve.co.uk
+;
+;              Version 0.1
+;
+; Created one lazy Sunday afternoon on
+;      the fourth of March, 2001.
+;
+;-----------------------------------------
+
+
+;=====================================================
+;
+; Please disregard my comments as the rantings of a
+; clueless novice! Feel at liberty to scoff at my
+; hopeless first try at writing Z80 code :-)
+;
+; NB. Any feedback is welcome. I can take it (sniff).
+;
+;=====================================================
+
+
+
+.org $0000	; means "assemble starting from address $0000 in
+		; the object file". (The object file is the output
+		; file, i.e. the actual ROM image which the assembler 
+		; creates from this source file.)
+
+	
+ 	di		; disable interrupts
+ 	im 1		; set interrupt mode 1 (the only mode that's
+			; useful on the vanilla SMS)
+
+			; (NB: We don't enable interrupts, 
+			;  as we don't need them in this program!)
+
+	ld sp, $DFF0	; set stack pointer to a sensible value, 
+			; at the end of user RAM. The stack
+			; grows downwards from this address.
+
+ 	jp main		; jump to the main part of the program*
+        
+   
+.org $0066
+
+
+	retn		; the Z80 jumps here in the event of the Pause
+			; button being pressed, which generates a non
+			; maskable interrupt (NMI). We need to return
+			; from this NMI even though we don't do anything
+			; with Pause as such.
+
+
+
+	; * which starts right here.
+
+main:	; <- this is called a label, it's not part of Z80 ASM but is
+	; used as a marker during assembly. It saves having to put
+	; jp [address] when we have no way of knowing what [address]
+	; will turn out to be :-)
+
+
+	; This is the VDP register initialisation routine. We write some
+	; sensible default values to the VDP registers.
+
+	ld hl, vdp_reg	; points to start of VDP register data. This data
+			; is in the vdpdef file, and vdp_reg is a label
+			; which points to the start of this data.
+
+ 	ld b, vdp_size	; number of bytes to be written. (We need to
+			; write a data byte followed by a control byte
+			; for each register, so this will be equal to
+			; the number of registers to be written multiplied
+			; by 2.)
+
+			; For more info on this, see the vpddef file for
+			; an explanation of the register values and what
+			; they mean. Also read docs by Charles MacDonald,
+			; Richard Talbot-Watkins, et al.
+
+
+	ld c, $BF	; Port $BF is the VDP control port. Writing to this
+			; port allows VDP register writes, and also
+			; allows the CRAM or VRAM address registers to be set 
+			; (again, see the docs).
+
+			; Newcomers should note that the Z80 has a separate
+			; control signal, called _IORQ, for I/O reads and
+			; writes as opposed to memory access. It means that
+			; there is effectively a separate 8-bit address space
+			; for hardware devices. This is called port-mapped
+			; I/O, and addresses in this space which correspond
+			; to I/O devices are known as ports. The Z80 has
+			; special instructions, the in and out instructions,
+			; for dealing with these.
+
+
+	otir		; This is one of the repeating instructions for
+			; which the Z80 is famous. It basically means
+			; "output the byte stored in the memory address
+			; pointed to by the HL register pair to the port
+			; address stored in the C register, increment the
+			; HL register pair and decrement the B register,
+			; then repeat until B is equal to zero."
+
+			; Phew! Doing the same thing on the 6502 would
+			; require a loop with conditional branch, this
+			; shows how compact Z80 code can be in
+			; comparison.
+
+
+  	; Now we need to clear VRAM, which will still have stuff stored
+	; in it from the fancy BIOS bumper routine.
+
+	ld a, $00	; We output two bytes to the VDP control port
+	out ($BF), a	; to indicate that we want to write to VRAM
+	ld a, %01000000	; and to set the VRAM address pointer to
+ 	out ($BF), a	; $0000.
+
+	ld bc, $4000	; The VRAM is 16 Kilobytes in size, which
+			; is equivalent to $4000 bytes in hexadecimal.
+			; That's how many bytes we need to write to
+			; VRAM in order to clear it, so we set the
+			; BC register pair up as a counter for this
+			; operation.
+
+			; Yes, another nice feature of the Z80 is
+			; that registers (B, C, D, E, H, L) can be
+			; manipulated as pairs (BC, DE, HL) to store
+			; 16-bit values. 
+
+
+
+vram_clear_loop:	; This label is used to indicate the start of
+			; a loop.
+
+
+ 	ld a, $00	; Output $00 to the VDP data port ($BE) to store
+	out ($BE), a	; $00 (zero) at the current VRAM address.
+			; The VRAM address pointer is incremented
+			; automatically.
+
+	dec c				; I don't like this at all.
+	jr nz, vram_clear_loop		; What we're doing is
+	 				; decrementing the B and C
+					; registers and jumping
+	dec b				; back to the start of the
+	jr nz, vram_clear_loop		; loop if either is not
+					; zero. This gives us
+					; $4000 iterations of the
+					; loop.
+
+			; How much nicer it would be to say:
+			;
+			; 	dec bc
+			; 	jr nz, vram_clear_loop
+			;
+			; but no! Decrementing a register
+			; pair has no effect on the status
+			; flags so it's of no use in
+			; conditional branching. Shame :-(
+
+
+	; There's probably a far more elegant way of achieving the
+	; above, but I'm a novice myself, so haven't progressed
+	; to optimising code yet.
+
+	; Now we need to write to CRAM to set the palette.
+
+	ld hl, palette	; load HL with start address of palette
+			; data.
+
+	ld b, $20	; Load B with number of bytes to be written
+			; to CRAM. There are 32 ($20 hex) palette
+			; entries - 16 for the tile palette,
+			; 16 for the sprite palette.
+
+	ld c, $BE	; load C with the VDP data port address.
+ 	
+ 	ld a, $00	; write two bytes to the VDP control port
+	out ($BF), a	; to indicate a CRAM write operation 
+	ld a, $C0	; starting from address $00.
+	out ($BF), a	; Then, writes to the VDP data port ($BE)
+			; will be stored in CRAM and automatically
+			; increment the CRAM address pointer.
+
+ 	otir		; see above for explanation. Transfers
+			; the 32 bytes of palette data to CRAM.
+
+
+ 	; We now need to store the tile data for the character
+	; set, starting at VRAM address $0000.
+
+	; See the VDP docs for an explanation of how the
+	; tile-mapped graphics system works. Basically the
+	; tile data is stored as four bytes per line (32 bytes
+	; per tile), with each byte representing a bit of the
+	; palette colour used for each of the 8 pixels in a
+	; row of the tile.
+
+
+tile_init:
+
+	ld a, $00	; two writes to the VDP control port
+	out ($BF), a	; which indicate we want to write to
+ 	ld a, $40	; VRAM starting from address $0000.
+ 	out ($BF), a
+
+	ld hl, char_set		; Load HL with start address of
+				; character set data.
+
+ 	ld bc, char_set_size	; Load BC with size of character
+				; set in bytes (we use it as
+				; a counter).
+
+				; This will be equivalent to the
+				; number of characters multiplied
+				; by 8 (8 bytes per character).
+
+tile_loop:
+
+ 	ld a, (HL)	; load accumulator with character data byte
+			; (represents one line of the character)
+
+	out ($BE), a	; output this data four times to the VDP
+ 	out ($BE), a	; data port. This means the characters use
+ 	out ($BE), a	; colour 15 from the palette - the VDP docs
+ 	out ($BE), a	; explain how this works.
+
+
+ 	inc hl		; increment HL to point to next data byte
+
+	dec c			; This messy system for decrementing
+				; BC with conditional branching
+ 	jr nz, tile_loop	; once again. Ugh.
+
+ 	dec b			; By the way, jr (as opposed to jp)
+				; means a *relative* jump. It can
+	jr nz, tile_loop	; only be used to jump to addresses
+				; within a certain range, but is
+				; faster than jp so is ideal for
+				; implementing loops.
+
+
+	; At this point, the character set should be visible in
+	; the Tile Viewer if you're using the Meka emulator.
+
+	
+	; Our next task is to update the *name table* with the
+	; message data. The name table is a 32 by 24 table of 16-bit
+	; words in VRAM, which tells the VDP which tile to display
+	; in that position on the screen, which palette to use,
+	; whether to flip the tile, etc.
+
+	; We will start writing to the name table at $3840 hex, one
+	; row from the top of the TV screen.
+
+
+#define name_table_address $3840	; This define is simply a way
+					; of saying to the assembler
+					; "Wherever you find
+					; name_table_address in the
+					; source, substitute $3840
+					; in its place."
+
+					; Names are easier to remember
+					; than numbers, and it's
+					; possible to change an
+					; address or value without
+					; having to change each instance
+					; in the code :-)
+
+
+	ld bc, name_table_address	; load BC with name table
+					; start address in VRAM.
+
+	ld a, c			; Writes the low byte of the VRAM address
+	out ($BF), a		; to the VDP control port.
+
+				; Since we loaded the BC pair with a
+				; 16-bit value, B will contain the high
+				; byte and C the low byte.
+
+ 	ld a, b			; We need to XOR the high byte of the
+	xor $40			; name table address with $40 to set
+				; the "write" bit of the control byte,
+				; indicating to the VDP we want to
+				; write to VRAM rather than read from it.
+				
+ 	out ($BF), a		; Then we output this byte to the VDP
+				; control port.
+	
+
+	ld hl, text_data	; Load the HL pair with the start
+				; address of the text message data.
+
+	
+start_of_loop:
+
+	ld a, (hl)		; Load byte of message into accumulator.
+
+	cp $00			; A zero byte ($00) indicates the end of
+	jr z, end_of_loop	; the message, so branch out of the loop
+				; if this byte is equal to zero. The cp
+				; instruction means "compare with
+				; accumulator", and sets the zero flag if
+				; a match is found.
+
+	sub $20			; This is code conversion. Tile number x
+				; contains the character value for ASCII
+				; ($20+x). So we subtract $20 from the
+				; byte to get the correct tile number.
+
+	out ($BE), a		; Output tile number to the VDP data
+				; register. This is the "even byte" of
+				; the name table pair.
+
+	ld a, %00000000		; The "odd byte" of the name table pair
+	out ($BE), a		; contains the most significant bit of
+				; the tile number and various flags
+				; denoting whether to flip a tile and
+				; which of the two palettes to use. The
+				; VDP docs have more information on
+				; this.				
+
+	inc hl			; increment the HL pair to point to the
+	jr start_of_loop	; next character of the message and
+				; jump back to start of loop.
+
+end_of_loop:
+
+	
+
+	; Finally we have to turn on the VDP to see the result of
+	; our hard work, so the message is displayed on the screen.
+	; This is done by setting bit 6 of VDP register 1.
+	
+
+	ld a, %11000000		; set bits 6 and 7
+	out ($BF), a
+	ld a, %10000001		; indicates a write to VDP reg. 1
+	out ($BF), a
+
+
+	; You should now see the text on the screen!!!
+
+end_of_demo:
+
+	jp end_of_demo		; This just goes round in an endless
+				; loop until you turn the SMS off.
+
+
+
+	; Right that's the program out of the way, now for the data.
+
+vdp_reg:
+
+.include "vdpdef"
+;---------------------------------------------
+;
+;   Some default SMS VDP Register values
+;                by Mike G.
+;              4th March 2001
+;
+;   Many thanks to Jon, SMSC, Charles
+;   MacDonald, and Richard Talbot-Watkins
+;   for their sterling work in documenting
+;   the SMS VDP functions.
+;
+;   Thanks also to Sean Young of msxnet.org
+;   for his accurate and exhaustive TMS9918
+;   document.
+;
+;   You should read these documents if you
+;   want accurate VDP info - the comments
+;   in this source are just a guide.
+; 
+;   The data should also apply to the SG-1000
+;   except for those settings marked as SMS
+;   only.
+;---------------------------------------------
+
+; Note:
+;
+; By "on SMS" or "SMS only" I mean "when SMS mode is set",
+; i.e. when bit 2 of register 0 is set.
+;
+; By "on TMS9918" or "TMS9918 only" I mean "when TMS mode is set",
+; i.e. when bit 2 of register 0 is reset.
+
+
+; Register 0
+
+.db %00000100		; byte to write to VDP register
+.db %10000000		; register to write to (%1000xxxx where xxxx is reg. no.)
+
+
+; BIT 76543210 (bit numbering, for those who don't know)
+;    %xxxxxxxx
+;
+; "Set" means "make this bit equal to 1"
+; "Reset" means "make this bit equal to 0"
+;
+; What each bit means:
+;
+; Bit 0 - Set to disable screen sync (causes TV to "roll" on a real SMS).
+;     1 - Set to stretch screen to 33 columns on SMS. Set to enable mode 2 on TMS9918.
+;     2 - Set to enable SMS display mode, reset to enable TMS9918 (SG-1000) type modes.
+;     3 - Set to shift sprites left by 8 pixels (SMS only).
+;     4 - Set to enable line interrupts (SMS only).
+;     5 - Set to blank column 0, allows smooth horizontal scrolling (SMS only).
+;     6 - Set to fix top two rows during horizontal scroll (SMS only).
+;     7 - Set to fix right 8 columns during vertical scroll (SMS only).
+
+
+; Register 1
+
+.db %10000000
+.db %10000001
+
+; Bit 0 - Enable "zoomed sprites" - each sprite pixel is zoomed to 4 pixels giving 16x16 sprite.
+;     1 - Enable "magnified sprites" - 8x16 sprites consisting of 2 tiles. (SMS only).
+;         On the TMS9918, this bit sets a further level of zoom to give up to 32x32 sprites.
+;     2 - Does nothing.
+;     3 - Expand screen by 6 rows on SMS giving a 32x30 screen. Set to enable mode 3 on TMS9918.
+;     4 - Expand screen by 4 rows on SMS giving a 32x28 screen. Set to enable mode 1 on TMS9918.
+;     5 - Set to enable VSync interrupts on both SMS and TMS9918.
+;     6 - Set to enable VDP display.
+;     7 - Set to enable 16K VRAM, reset for 4K VRAM. This bit must *always* be set as the SMS
+;         and SG-1000 consoles have 16K of VRAM.
+
+
+; Register 2
+
+.db %11111111
+.db %10000010
+
+;  Set name table address at $800 byte offset. Only bits 1, 2 and 3 are significant, so
+;  a setting of %xxxx111x results in a name table address of %11100000000000, or $3800.
+
+; Register 5
+
+.db %11111111
+.db %10000101
+
+; Set base address of sprite attribute table. Only bits 1-6 are significant, so
+; a setting of %x111111x results in an attribute table address of $11111100000000, or $3F00.
+  
+; Register 6
+
+.db %11111111
+.db %10000110
+
+; Set base adress of sprite generator table on TMS9918.
+; On the SMS, this address is used to select the base address of tiles used for
+; sprites - only bit 2 is significant, so a setting of %xxxxx1xx results in a base
+; address of $2000 and %xxxxx0xx results in a base address of $0000. This is needed
+; because only 8 bits are used to set the tile number in the sprite attribute table,
+; so it effectively acts as a "9th bit" for the tile address of *all* sprites.
+
+; Register 7
+
+.db %00000010
+.db %10000111
+
+; Two nibbles (4 bit words). The high nibble (bits 4-7) selects the palette colour used for text
+; on the TMS9918, the low nibble (bits 0-3) selects the colour from the sprite palette to be used
+; for the border (on both TMS9918 and SMS). In each case it's a number from 0 to 15.
+
+; Register 8
+
+.db %00000000
+.db %10001000
+
+; Selects horizontal scroll offset of column 0 in pixels from the left hand edge. (SMS only.)
+
+; Register 9
+
+.db %00000000
+.db %10001001
+
+; Selects vertical scroll offset. The value in this register indicates the line of the SMS display
+; to be displayed on the top scanline of the TV picture. (SMS only.)
+
+; Register 10
+
+.db %00000000
+.db %10001010
+
+; Finally, register 10 selects the number of scanlines to occur between line interrupts (assuming line
+; interrupts are enabled). (SMS only.)
+
+;---------------------------------------------
+;  Mike G. 04/03/01
+;
+;  mike@mikeg2.freeserve.co.uk
+;
+; my page - http://www.mikeg2.freeserve.co.uk
+;
+;  SMS Power! http://www.smspower.org
+;---------------------------------------------
+			; means "insert the contents of file vdpdef
+			; at this point". vdpdef contains the default
+			; VDP register values.
+
+vdp_reg_end:
+
+ 	nop
+
+palette:
+
+.include "palette"
+; Some default SMS palette data
+; Mike G, 4th March 2001
+;-------------------------------
+
+
+; Tile (name table) palette
+
+.db %00000000
+.db %00110000
+.db %00001100
+.db %00000011
+.db %00111100
+.db %00110011
+.db %00001111
+.db %00010110
+
+.db %00011001
+.db %00000110
+.db %00110101
+.db %00100001
+.db %00001101
+.db %00110111
+.db %00100011
+.db %00111111
+
+; Sprite palette
+
+.db %00000000
+.db %00110000
+.db %00001100
+.db %00000011
+.db %00111100
+.db %00110011
+.db %00001111
+.db %00010110
+
+.db %00011001
+.db %00000110
+.db %00110101
+.db %00100001
+.db %00001101
+.db %00110111
+.db %00100011
+.db %00000111
+
+;-------------------------------------
+; mike@mikeg2.freeserve.co.uk
+; SMS Power! - http://www.smspower.org
+			; palette contains the default palette entries.
+
+
+char_set:
+
+.include "font"
+;------------------------------------------
+; In loving memory of Acorn Computers Ltd.
+;      Mike G proudly presents the:
+;
+;       BBC Micro Character Set!
+;       ========================
+;
+; This source was created automatically
+; from character data stored in the BBC
+; Microcomputer operating system ROM.
+;
+; The BBC set is a nice, clear font which
+; (unlike the classic Namco/Sega font)
+; includes lower-case letters as well as
+; upper-case. 
+;
+; Being a British micro, there's even a
+; Pound Sterling currency symbol, which
+; should come in handy when I begin to
+; write financial apps on the SMS. (Just
+; kidding!)
+;
+; Hopefully by using binary representation
+; it will be obvious how the character
+; data is stored.
+;
+;------------------------------------------
+
+
+ ; Character 0x20 (space)
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x21 !
+
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x22 "
+
+.DB %01101100    ; Hex 6Ch
+.DB %01101100    ; Hex 6Ch
+.DB %01101100    ; Hex 6Ch
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x23 #
+
+.DB %00110110    ; Hex 36h
+.DB %00110110    ; Hex 36h
+.DB %01111111    ; Hex 7Fh
+.DB %00110110    ; Hex 36h
+.DB %01111111    ; Hex 7Fh
+.DB %00110110    ; Hex 36h
+.DB %00110110    ; Hex 36h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x24 $
+
+.DB %00001100    ; Hex 0Ch
+.DB %00111111    ; Hex 3Fh
+.DB %01101000    ; Hex 68h
+.DB %00111110    ; Hex 3Eh
+.DB %00001011    ; Hex 0Bh
+.DB %01111110    ; Hex 7Eh
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x25 %
+
+.DB %01100000    ; Hex 60h
+.DB %01100110    ; Hex 66h
+.DB %00001100    ; Hex 0Ch
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+.DB %01100110    ; Hex 66h
+.DB %00000110    ; Hex 06h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x26 &
+
+.DB %00111000    ; Hex 38h
+.DB %01101100    ; Hex 6Ch
+.DB %01101100    ; Hex 6Ch
+.DB %00111000    ; Hex 38h
+.DB %01101101    ; Hex 6Dh
+.DB %01100110    ; Hex 66h
+.DB %00111011    ; Hex 3Bh
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x27 '
+
+.DB %00001100    ; Hex 0Ch
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x28 (
+
+.DB %00001100    ; Hex 0Ch
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+.DB %00110000    ; Hex 30h
+.DB %00110000    ; Hex 30h
+.DB %00011000    ; Hex 18h
+.DB %00001100    ; Hex 0Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x29 )
+
+.DB %00110000    ; Hex 30h
+.DB %00011000    ; Hex 18h
+.DB %00001100    ; Hex 0Ch
+.DB %00001100    ; Hex 0Ch
+.DB %00001100    ; Hex 0Ch
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x2A *
+
+.DB %00000000    ; Hex 00h
+.DB %00011000    ; Hex 18h
+.DB %01111110    ; Hex 7Eh
+.DB %00111100    ; Hex 3Ch
+.DB %01111110    ; Hex 7Eh
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x2B +
+
+.DB %00000000    ; Hex 00h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %01111110    ; Hex 7Eh
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x2C ,
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+
+
+
+ ; Character 0x2D -
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %01111110    ; Hex 7Eh
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x2E .
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x2F /
+
+.DB %00000000    ; Hex 00h
+.DB %00000110    ; Hex 06h
+.DB %00001100    ; Hex 0Ch
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+.DB %01100000    ; Hex 60h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x30 0
+
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01101110    ; Hex 6Eh
+.DB %01111110    ; Hex 7Eh
+.DB %01110110    ; Hex 76h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x31 1
+
+.DB %00011000    ; Hex 18h
+.DB %00111000    ; Hex 38h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %01111110    ; Hex 7Eh
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x32 2
+
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %00000110    ; Hex 06h
+.DB %00001100    ; Hex 0Ch
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+.DB %01111110    ; Hex 7Eh
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x33 3
+
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %00000110    ; Hex 06h
+.DB %00011100    ; Hex 1Ch
+.DB %00000110    ; Hex 06h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x34 4
+
+.DB %00001100    ; Hex 0Ch
+.DB %00011100    ; Hex 1Ch
+.DB %00111100    ; Hex 3Ch
+.DB %01101100    ; Hex 6Ch
+.DB %01111110    ; Hex 7Eh
+.DB %00001100    ; Hex 0Ch
+.DB %00001100    ; Hex 0Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x35 5
+
+.DB %01111110    ; Hex 7Eh
+.DB %01100000    ; Hex 60h
+.DB %01111100    ; Hex 7Ch
+.DB %00000110    ; Hex 06h
+.DB %00000110    ; Hex 06h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x36 6
+
+.DB %00011100    ; Hex 1Ch
+.DB %00110000    ; Hex 30h
+.DB %01100000    ; Hex 60h
+.DB %01111100    ; Hex 7Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x37 7
+
+.DB %01111110    ; Hex 7Eh
+.DB %00000110    ; Hex 06h
+.DB %00001100    ; Hex 0Ch
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+.DB %00110000    ; Hex 30h
+.DB %00110000    ; Hex 30h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x38 8
+
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x39 9
+
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111110    ; Hex 3Eh
+.DB %00000110    ; Hex 06h
+.DB %00001100    ; Hex 0Ch
+.DB %00111000    ; Hex 38h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x3A :
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x3B ;
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+
+
+
+ ; Character 0x3C <
+
+.DB %00001100    ; Hex 0Ch
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+.DB %01100000    ; Hex 60h
+.DB %00110000    ; Hex 30h
+.DB %00011000    ; Hex 18h
+.DB %00001100    ; Hex 0Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x3D =
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %01111110    ; Hex 7Eh
+.DB %00000000    ; Hex 00h
+.DB %01111110    ; Hex 7Eh
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x3E >
+
+.DB %00110000    ; Hex 30h
+.DB %00011000    ; Hex 18h
+.DB %00001100    ; Hex 0Ch
+.DB %00000110    ; Hex 06h
+.DB %00001100    ; Hex 0Ch
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x3F ?
+
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %00001100    ; Hex 0Ch
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x40 @
+
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01101110    ; Hex 6Eh
+.DB %01101010    ; Hex 6Ah
+.DB %01101110    ; Hex 6Eh
+.DB %01100000    ; Hex 60h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x41 A
+
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01111110    ; Hex 7Eh
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x42 B
+
+.DB %01111100    ; Hex 7Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01111100    ; Hex 7Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01111100    ; Hex 7Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x43 C
+
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x44 D
+
+.DB %01111000    ; Hex 78h
+.DB %01101100    ; Hex 6Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01101100    ; Hex 6Ch
+.DB %01111000    ; Hex 78h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x45 E
+
+.DB %01111110    ; Hex 7Eh
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01111100    ; Hex 7Ch
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01111110    ; Hex 7Eh
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x46 F
+
+.DB %01111110    ; Hex 7Eh
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01111100    ; Hex 7Ch
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x47 G
+
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01100000    ; Hex 60h
+.DB %01101110    ; Hex 6Eh
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x48 H
+
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01111110    ; Hex 7Eh
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x49 I
+
+.DB %01111110    ; Hex 7Eh
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %01111110    ; Hex 7Eh
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x4A J
+
+.DB %00111110    ; Hex 3Eh
+.DB %00001100    ; Hex 0Ch
+.DB %00001100    ; Hex 0Ch
+.DB %00001100    ; Hex 0Ch
+.DB %00001100    ; Hex 0Ch
+.DB %01101100    ; Hex 6Ch
+.DB %00111000    ; Hex 38h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x4B K
+
+.DB %01100110    ; Hex 66h
+.DB %01101100    ; Hex 6Ch
+.DB %01111000    ; Hex 78h
+.DB %01110000    ; Hex 70h
+.DB %01111000    ; Hex 78h
+.DB %01101100    ; Hex 6Ch
+.DB %01100110    ; Hex 66h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x4C L
+
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01111110    ; Hex 7Eh
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x4D M
+
+.DB %01100011    ; Hex 63h
+.DB %01110111    ; Hex 77h
+.DB %01111111    ; Hex 7Fh
+.DB %01101011    ; Hex 6Bh
+.DB %01101011    ; Hex 6Bh
+.DB %01100011    ; Hex 63h
+.DB %01100011    ; Hex 63h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x4E N
+
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01110110    ; Hex 76h
+.DB %01111110    ; Hex 7Eh
+.DB %01101110    ; Hex 6Eh
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x4F O
+
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x50 P
+
+.DB %01111100    ; Hex 7Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01111100    ; Hex 7Ch
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x51 Q
+
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01101010    ; Hex 6Ah
+.DB %01101100    ; Hex 6Ch
+.DB %00110110    ; Hex 36h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x52 R
+
+.DB %01111100    ; Hex 7Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01111100    ; Hex 7Ch
+.DB %01101100    ; Hex 6Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x53 S
+
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01100000    ; Hex 60h
+.DB %00111100    ; Hex 3Ch
+.DB %00000110    ; Hex 06h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x54 T
+
+.DB %01111110    ; Hex 7Eh
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x55 U
+
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x56 V
+
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x57 W
+
+.DB %01100011    ; Hex 63h
+.DB %01100011    ; Hex 63h
+.DB %01101011    ; Hex 6Bh
+.DB %01101011    ; Hex 6Bh
+.DB %01111111    ; Hex 7Fh
+.DB %01110111    ; Hex 77h
+.DB %01100011    ; Hex 63h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x58 X
+
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00011000    ; Hex 18h
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x59 Y
+
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x5A Z
+
+.DB %01111110    ; Hex 7Eh
+.DB %00000110    ; Hex 06h
+.DB %00001100    ; Hex 0Ch
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+.DB %01100000    ; Hex 60h
+.DB %01111110    ; Hex 7Eh
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x5B [
+
+.DB %01111100    ; Hex 7Ch
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01111100    ; Hex 7Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x5C \
+
+.DB %00000000    ; Hex 00h
+.DB %01100000    ; Hex 60h
+.DB %00110000    ; Hex 30h
+.DB %00011000    ; Hex 18h
+.DB %00001100    ; Hex 0Ch
+.DB %00000110    ; Hex 06h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x5D ]
+
+.DB %00111110    ; Hex 3Eh
+.DB %00000110    ; Hex 06h
+.DB %00000110    ; Hex 06h
+.DB %00000110    ; Hex 06h
+.DB %00000110    ; Hex 06h
+.DB %00000110    ; Hex 06h
+.DB %00111110    ; Hex 3Eh
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x5E ^
+
+.DB %00011000    ; Hex 18h
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01000010    ; Hex 42h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x5F (underscore)
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %11111111    ; Hex FFh
+
+
+
+ ; Character 0x60 (Pound Sterling)
+
+.DB %00011100    ; Hex 1Ch
+.DB %00110110    ; Hex 36h
+.DB %00110000    ; Hex 30h
+.DB %01111100    ; Hex 7Ch
+.DB %00110000    ; Hex 30h
+.DB %00110000    ; Hex 30h
+.DB %01111110    ; Hex 7Eh
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x61 a
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00111100    ; Hex 3Ch
+.DB %00000110    ; Hex 06h
+.DB %00111110    ; Hex 3Eh
+.DB %01100110    ; Hex 66h
+.DB %00111110    ; Hex 3Eh
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x62 b
+
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01111100    ; Hex 7Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01111100    ; Hex 7Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x63 c
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01100000    ; Hex 60h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x64 d
+
+.DB %00000110    ; Hex 06h
+.DB %00000110    ; Hex 06h
+.DB %00111110    ; Hex 3Eh
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111110    ; Hex 3Eh
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x65 e
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01111110    ; Hex 7Eh
+.DB %01100000    ; Hex 60h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x66 f
+
+.DB %00011100    ; Hex 1Ch
+.DB %00110000    ; Hex 30h
+.DB %00110000    ; Hex 30h
+.DB %01111100    ; Hex 7Ch
+.DB %00110000    ; Hex 30h
+.DB %00110000    ; Hex 30h
+.DB %00110000    ; Hex 30h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x67 g
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00111110    ; Hex 3Eh
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111110    ; Hex 3Eh
+.DB %00000110    ; Hex 06h
+.DB %00111100    ; Hex 3Ch
+
+
+
+ ; Character 0x68 h
+
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01111100    ; Hex 7Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x69 i
+
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+.DB %00111000    ; Hex 38h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x6A j
+
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+.DB %00111000    ; Hex 38h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %01110000    ; Hex 70h
+
+
+
+ ; Character 0x6B k
+
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01100110    ; Hex 66h
+.DB %01101100    ; Hex 6Ch
+.DB %01111000    ; Hex 78h
+.DB %01101100    ; Hex 6Ch
+.DB %01100110    ; Hex 66h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x6C l
+
+.DB %00111000    ; Hex 38h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x6D m
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00110110    ; Hex 36h
+.DB %01111111    ; Hex 7Fh
+.DB %01101011    ; Hex 6Bh
+.DB %01101011    ; Hex 6Bh
+.DB %01100011    ; Hex 63h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x6E n
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %01111100    ; Hex 7Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x6F o
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x70 p
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %01111100    ; Hex 7Ch
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01111100    ; Hex 7Ch
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+
+
+
+ ; Character 0x71 q
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00111110    ; Hex 3Eh
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111110    ; Hex 3Eh
+.DB %00000110    ; Hex 06h
+.DB %00000111    ; Hex 07h
+
+
+
+ ; Character 0x72 r
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %01101100    ; Hex 6Ch
+.DB %01110110    ; Hex 76h
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %01100000    ; Hex 60h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x73 s
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00111110    ; Hex 3Eh
+.DB %01100000    ; Hex 60h
+.DB %00111100    ; Hex 3Ch
+.DB %00000110    ; Hex 06h
+.DB %01111100    ; Hex 7Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x74 t
+
+.DB %00110000    ; Hex 30h
+.DB %00110000    ; Hex 30h
+.DB %01111100    ; Hex 7Ch
+.DB %00110000    ; Hex 30h
+.DB %00110000    ; Hex 30h
+.DB %00110000    ; Hex 30h
+.DB %00011100    ; Hex 1Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x75 u
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111110    ; Hex 3Eh
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x76 v
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x77 w
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %01100011    ; Hex 63h
+.DB %01101011    ; Hex 6Bh
+.DB %01101011    ; Hex 6Bh
+.DB %01111111    ; Hex 7Fh
+.DB %00110110    ; Hex 36h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x78 x
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %01100110    ; Hex 66h
+.DB %00111100    ; Hex 3Ch
+.DB %00011000    ; Hex 18h
+.DB %00111100    ; Hex 3Ch
+.DB %01100110    ; Hex 66h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x79 y
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %01100110    ; Hex 66h
+.DB %00111110    ; Hex 3Eh
+.DB %00000110    ; Hex 06h
+.DB %00111100    ; Hex 3Ch
+
+
+
+ ; Character 0x7A z
+
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %01111110    ; Hex 7Eh
+.DB %00001100    ; Hex 0Ch
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+.DB %01111110    ; Hex 7Eh
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x7B {
+
+.DB %00001100    ; Hex 0Ch
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %01110000    ; Hex 70h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00001100    ; Hex 0Ch
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x7C (OR symbol)
+
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x7D }
+
+.DB %00110000    ; Hex 30h
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00001110    ; Hex 0Eh
+.DB %00011000    ; Hex 18h
+.DB %00011000    ; Hex 18h
+.DB %00110000    ; Hex 30h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x7E ~
+
+.DB %00110001    ; Hex 31h
+.DB %01101011    ; Hex 6Bh
+.DB %01000110    ; Hex 46h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+.DB %00000000    ; Hex 00h
+
+
+
+ ; Character 0x7F (block)
+
+.DB %11111111    ; Hex FFh
+.DB %11111111    ; Hex FFh
+.DB %11111111    ; Hex FFh
+.DB %11111111    ; Hex FFh
+.DB %11111111    ; Hex FFh
+.DB %11111111    ; Hex FFh
+.DB %11111111    ; Hex FFh
+.DB %11111111    ; Hex FFh
+
+
+;------------------------------------------
+;
+; That's all folks! Now that Acorn is no
+; longer with us (RIP), it should be safe
+; to use this font in any homebrew 
+; projects.
+;
+; Anyone is welcome to distribute and use
+; this source file for whatever purpose
+; they wish.
+;
+;
+; Best wishes,
+;
+; Mike G. (mike@mikeg2.freeserve.co.uk)
+;
+; 4th March 2001
+;
+; SMS Power! - www.smspower.org
+; SMSReader - www.smspower.org/smsreader/
+;
+; My Home Page: www.mikeg2.freeserve.co.uk
+;
+;------------------------------------------
+			; font contains the character set data.
+
+char_set_end:
+
+	nop
+
+	; A couple of defines (see above for what they mean).
+
+	; char_set_size is defined as the value of char_set_end
+	; minus the value of char_set. It's the number of bytes
+	; in the character set.
+
+#define char_set_size char_set_end-char_set
+
+	; Similarly for vdp_size:
+
+#define vdp_size vdp_reg_end-vdp_reg
+
+
+text_data:
+
+.include "text"
+;-------------------------
+;
+;  Text message data
+; for "Only Words" demo
+;
+;   by Mike G.
+;
+;   4th March 2001
+;
+;-------------------------
+
+
+
+.db "          Only"
+.db " Words            "
+.db "          ===="
+.db "======            "
+.db "             "
+.db "                   "
+.db "  This demo was"
+.db " written to show "
+.db " my (lack of) p"
+.db "rogramming talent"
+.db " and to demonst"
+.db "rate how (not) to"
+.db " perform one of"
+.db " the simplest    "
+.db " tasks - displ"
+.db "aying words on the"
+.db " screen :-)  "
+.db "                   "
+.db "             "
+.db "                   "
+.db "  It's also my"
+.db " first attempt at "
+.db " coding for th"
+.db "e SMS or indeed   "
+.db " any Z80 platform,"
+.db " so please be "
+.db " gentle!      "
+.db "                  "
+.db "             "
+.db "                   "
+.db " Greetings to"
+.db " Zoop, Heliophobe, "
+.db " Eric, Maxim a"
+.db "nd everyone at S8-"
+.db " Dev.        "
+.db "                   "
+.db "             "
+.db "                   "
+.db "  http://www."
+.db "smspower.org/dev/  "
+.db "             "
+.db "                   "
+.db "  Ver. 0.1 by"
+.db " Mike G, 4/3/01.   "
+
+.db $00
+	; zero byte ends text.
+
+			; include the ASCII data for the text to
+			; be displayed.
+
+sdsc_data:
+
+.db "Only Words", $00
+			; SDSC title data, zero terminated.
+
+
+.org $7FE0
+
+	; The SDSC header data based on proposed spec.
+
+.db "SDSC"
+.db $00			; Major program version no.
+.db $01			; Minor program version no.
+.db $04			; Release day
+.db $03			; 	  month
+.db $01, $20		;         year
+
+.org $7FEC
+
+.db sdsc_data%256  	; ROM address of title string (low byte)
+.db sdsc_data/256	;			      (high byte)	
+.db $FF, $FF		; ROM address of release notes ($FFFF = null)
+
+
+	; Now lastly, the SMS header data.
+
+.org $7FF0
+
+.db "TMR SEGA"
+
+.db $20, $20
+
+.db $AE, $8E		; Checksum data low byte, high byte. (This must
+			; be changed if the source is modified.)
+
+.db $20, $20, $00
+
+.db $4C			; Indicates US/European country code (4) and 32
+			; kilobyte ROM ($0C).
+   
+.org $8000
+
+.end	; this indicates the end of the source file to the
+	; assembler.
+
+
+total time: 0.0081 sec.
+no errors

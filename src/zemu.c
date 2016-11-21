@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include "zemu.h"
+#include "utils.h"
 
 int main(int argc, char **argv) {
     z80_t *cpu;
@@ -20,7 +21,7 @@ int main(int argc, char **argv) {
 
     cpu = setup();
     load_rom(cpu, romfile);
-    dump_rom(cpu, 0, 16);
+    dump_rom(cpu, 0, 40);
     loop(cpu);
     shutdown(cpu);
     fclose(romfile);
@@ -28,21 +29,9 @@ int main(int argc, char **argv) {
     return 0;
 }
 
-void load_rom(z80_t *cpu, FILE *romfile) {
-    unsigned int count;
-    count = fread(cpu->rom, 1, Z80_ROM_SIZE, romfile);
-    printf("Loaded %u byte ROM file\n", count);
+void write_port(uint16_t addr, uint8_t data) {
+    printf("WRITEOUT: (0x%04X) 0x%02X\n", addr, data);
     return;
-}
-
-void dump_rom(z80_t *cpu, uint16_t offset, uint16_t size) {
-    if (size > Z80_ROM_SIZE) {
-        size = Z80_ROM_SIZE;
-    }
-    for (uint8_t *p = cpu->rom + offset; p <= cpu->rom + (size ? size : Z80_ROM_SIZE); p++) {
-        printf("0x%04X: %02x\n", p - cpu->rom, *p);
-    }
-    printf("\n");
 }
 
 z80_t *setup() {
@@ -56,6 +45,7 @@ z80_t *setup() {
     printf("Allocated MEM at\t%p\t(%u B)\n", cpu->mem, Z80_MEM_SIZE);
 
     // Default values;
+    cpu->flags = &cpu->reg->af.lsb;
     cpu->reg->sp = 0xFFFF;
 
     return cpu;
@@ -66,23 +56,6 @@ void shutdown(z80_t *cpu) {
     free(cpu->rom);
     free(cpu->reg);
     free(cpu);
-    return;
-}
-
-void print_registers(z80_t *cpu) {
-    registers_t *reg = cpu->reg;
-    printf("PC  = 0x%04X\n", reg->pc);
-    printf("SP  = 0x%04X\n", reg->sp);
-    printf("IX  = 0x%04X\n", reg->ix.full);
-    printf("IY  = 0x%04X\n", reg->iy.full);
-    printf("BC  = 0x%04X\tB  = 0x%02X\tC  = 0x%02X\n", reg->bc.full, reg->bc.msb, reg->bc.lsb);
-    printf("BC' = 0x%04X\tB' = 0x%02X\tC' = 0x%02X\n", reg->bc1.full, reg->bc1.msb, reg->bc1.lsb);
-    printf("DE  = 0x%04X\tD  = 0x%02X\tE  = 0x%02X\n", reg->de.full, reg->de.msb, reg->de.lsb);
-    printf("DE' = 0x%04X\tD' = 0x%02X\tE' = 0x%02X\n", reg->de1.full, reg->de1.msb, reg->de1.lsb);
-    printf("HL  = 0x%04X\tH  = 0x%02X\tL  = 0x%02X\n", reg->hl.full, reg->hl.msb, reg->hl.lsb);
-    printf("HL' = 0x%04X\tH' = 0x%02X\tL' = 0x%02X\n", reg->hl1.full, reg->hl1.msb, reg->hl1.lsb);
-    printf("AF  = 0x%04X\tA  = 0x%02X\tF  = 0x%02X\n", reg->af.full, reg->af.msb, reg->af.lsb);
-    printf("AF' = 0x%04X\tA' = 0x%02X\tF' = 0x%02X\n", reg->af1.full, reg->af1.msb, reg->af1.lsb);
     return;
 }
 

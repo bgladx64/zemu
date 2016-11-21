@@ -1,0 +1,13 @@
+#target rom
+
+#code _MAIN,0,0x4000
+
+main:
+        ld  bc,3f25H
+
+#end
+
+
+
+total time: 0.0003 sec.
+no errors

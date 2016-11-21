@@ -1,0 +1,17 @@
+#target rom
+
+#code _MAIN,0,0x4000
+
+main:
+    ld      SP,0FFFFH
+    ld      BC,0FFFFH
+loop:
+    push    BC
+    JP      loop
+
+#end
+
+
+
+total time: 0.0003 sec.
+no errors

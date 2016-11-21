@@ -1,0 +1,17 @@
+#target rom
+
+#code _MAIN,0,0x4000
+
+main:
+		ld		a,5
+        ld      b,7
+        ld      c,16
+        ld      d,25
+		add		a,b
+
+#end
+
+
+
+total time: 0.0002 sec.
+no errors

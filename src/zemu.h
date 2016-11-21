@@ -4,6 +4,27 @@
 
 #define Z80_ROM_SIZE 0xFFFF // 65536
 #define Z80_MEM_SIZE 0xFFFF // 65536
+#define DIE_ON_RST
+#define VERBOSE
+
+#define FLAG_BIT_SIGN       7
+#define FLAG_BIT_ZERO       6
+#define FLAG_BIT_5          5
+#define FLAG_BIT_HCARRY     4    // Half carry
+#define FLAG_BIT_3          3
+#define FLAG_BIT_PV         2    // Parity/overflow
+#define FLAG_BIT_SUBTRACT   1
+#define FLAG_BIT_CARRY      0
+
+#define FLAG_MASK_SIGN       0x80
+#define FLAG_MASK_ZERO       0x40
+#define FLAG_MASK_5          0x20
+#define FLAG_MASK_HCARRY     0x10    // Half carry
+#define FLAG_MASK_3          0x08
+#define FLAG_MASK_PV         0x04    // Parity/overflow
+#define FLAG_MASK_SUBTRACT   0x02
+#define FLAG_MASK_CARRY      0x01
+
 
 ///////////////////
 // Data Structures
@@ -36,6 +57,10 @@ typedef struct registers {
 typedef struct z80 {
     uint8_t *rom;
     uint8_t *mem;
+    uint8_t *flags;
+    uint8_t iff1;
+    uint8_t iff2;
+    uint8_t im;
     registers_t *reg;
 } z80_t;
 
@@ -43,9 +68,8 @@ typedef struct z80 {
 // Functions
 ///////////////////
 void loop(z80_t *);
+void ed_instructions(z80_t *);
 z80_t *setup();
 void shutdown(z80_t *);
-void print_registers(z80_t *);
-void load_rom(z80_t *, FILE *);
-void dump_rom(z80_t *, uint16_t, uint16_t);
+void write_port(uint16_t addr, uint8_t data);
 
